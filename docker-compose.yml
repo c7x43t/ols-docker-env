@@ -1,7 +1,7 @@
 version: '3'
 services:
   mysql:
-    image: mariadb:10.5.9
+    image: mariadb:10.5.20
     logging:
       driver: none
     command: --max_allowed_packet=256M
@@ -14,7 +14,8 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     restart: always
     networks:
-      - default
+      - backend
+
   litespeed:
     image: litespeedtech/openlitespeed:${OLS_VERSION}-${PHP_VERSION}
     logging:
@@ -28,6 +29,8 @@ services:
       - ./sites:/var/www/vhosts/
       - ./acme:/root/.acme.sh/
       - ./logs:/usr/local/lsws/logs/
+      - ./flag:/flag
+      - ./startup-script.sh:/startup-script.sh
     ports:
       - 80:80
       - 443:443
@@ -37,17 +40,51 @@ services:
     environment:
       TZ: ${TimeZone}
     networks:
-      - default
+      - backend
+      - envoy
+    command: [ "/bin/bash", "/startup-script.sh" ]
+
   phpmyadmin:
     image: bitnami/phpmyadmin:5.2.0-debian-11-r43
     ports:
       - 8080:8080
       - 8443:8443
     environment:
-        DATABASE_HOST: mysql
+      DATABASE_HOST: mysql
     restart: always
     networks:
-      - default
+      - backend
+      - envoy
+
+  typesense:
+    image: typesense/typesense:0.25.0.rc30
+    container_name: typesense
+    restart: always
+    command: --data-dir /data --api-key=YOUR_ENV_VARIABLE
+    # network_mode: "host"
+    volumes:
+      - ./typesense-data:/data
+    ports:
+      - 8108:8108
+    networks:
+      - backend
+      - envoy
+
+  dragonflydb:
+    image: 'docker.dragonflydb.io/dragonflydb/dragonfly'
+    container_name: dragonflydb
+    ulimits:
+      memlock: -1
+    restart: always
+    ports:
+      - 6379:6379
+    volumes:
+      - ./dragonflydb:/data
+    networks:
+      - backend
+
 networks:
-  default:
+  backend:
+    driver: bridge
+  envoy:
     driver: bridge
